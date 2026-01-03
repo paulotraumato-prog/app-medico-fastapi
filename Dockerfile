@@ -8,13 +8,22 @@ WORKDIR /code
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia o restante do código (arquivos Python na raiz)
-COPY *.py ./
-COPY *.html ./templates/
+# Cria a estrutura de pastas app/ e app/templates/
+RUN mkdir -p app/templates
 
-# Cria a estrutura de pastas necessária
-RUN mkdir -p templates
+# Copia os arquivos Python para a pasta app/
+COPY main.py ./app/
+COPY config.py ./app/
+COPY models.py ./app/
+COPY schemas.py ./app/
+COPY utils.py ./app/
+COPY mercadopago_utils.py ./app/
+
+# Cria o __init__.py para o pacote app
+RUN touch app/__init__.py
+
+# Copia os templates HTML para app/templates/
+COPY *.html ./app/templates/
 
 # Comando para rodar a aplicação com Uvicorn
-# O Render usará este comando se não houver um Build Command ou Start Command específico
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
