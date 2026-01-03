@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Database
+*.db
+*.sqlite
+/app/database/
+
+# Environment
+.env
+.DS_Store
