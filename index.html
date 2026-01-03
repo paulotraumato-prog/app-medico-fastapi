@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Médico - Login/Registro</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); width: 350px; }
+        h2 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .tab-content { margin-top: 20px; }
+        .tab-button { background: #eee; border: none; padding: 10px 15px; cursor: pointer; margin-right: 5px; border-radius: 4px 4px 0 0; }
+        .tab-button.active { background: white; border-bottom: 2px solid #007bff; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>App Médico</h2>
+        
+        <div style="text-align: center; margin-bottom: 15px;">
+            <button class="tab-button active" onclick="showTab('login')">Login</button>
+            <button class="tab-button" onclick="showTab('register-patient')">Registro Paciente</button>
+            <button class="tab-button" onclick="showTab('register-doctor')">Registro Médico</button>
+        </div>
+
+        <!-- Login Form -->
+        <div id="login" class="tab-content">
+            <h3>Login</h3>
+            <form action="/token" method="post">
+                <div class="form-group">
+                    <label for="username">Email:</label>
+                    <input type="email" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+
+        <!-- Register Patient Form -->
+        <div id="register-patient" class="tab-content" style="display: none;">
+            <h3>Registro Paciente</h3>
+            <form onsubmit="registerUser(event, 'patient')">
+                <div class="form-group">
+                    <label for="p-full_name">Nome Completo:</label>
+                    <input type="text" id="p-full_name" name="full_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="p-email">Email:</label>
+                    <input type="email" id="p-email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="p-password">Senha:</label>
+                    <input type="password" id="p-password" name="password" required>
+                </div>
+                <button type="submit">Registrar</button>
+            </form>
+            <div id="p-message" class="message" style="display: none;"></div>
+        </div>
+
+        <!-- Register Doctor Form -->
+        <div id="register-doctor" class="tab-content" style="display: none;">
+            <h3>Registro Médico</h3>
+            <form onsubmit="registerUser(event, 'doctor')">
+                <div class="form-group">
+                    <label for="d-full_name">Nome Completo:</label>
+                    <input type="text" id="d-full_name" name="full_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="d-email">Email:</label>
+                    <input type="email" id="d-email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="d-crm">CRM:</label>
+                    <input type="text" id="d-crm" name="crm" required>
+                </div>
+                <div class="form-group">
+                    <label for="d-password">Senha:</label>
+                    <input type="password" id="d-password" name="password" required>
+                </div>
+                <button type="submit">Registrar</button>
+            </form>
+            <div id="d-message" class="message" style="display: none;"></div>
+        </div>
+
+    </div>
+
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.style.display = 'none';
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(tabId).style.display = 'block';
+            document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`).classList.add('active');
+        }
+
+        async function registerUser(event, role) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const messageDiv = document.getElementById(`${role[0]}-message`);
+            
+            messageDiv.style.display = 'none';
+            messageDiv.classList.remove('error', 'success');
+
+            try {
+                const response = await fetch(`/api/register/${role}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    messageDiv.classList.add('success');
+                    messageDiv.innerHTML = `Registro de ${role} bem-sucedido! Faça o login.`;
+                    form.reset();
+                } else {
+                    messageDiv.classList.add('error');
+                    messageDiv.innerHTML = `Erro: ${result.detail || result.error || 'Falha no registro'}`;
+                }
+            } catch (error) {
+                messageDiv.classList.add('error');
+                messageDiv.innerHTML = `Erro de conexão: ${error.message}`;
+            } finally {
+                messageDiv.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

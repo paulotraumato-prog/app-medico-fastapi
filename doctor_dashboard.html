@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard do Médico</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header h1 { color: #333; }
+        .header a { text-decoration: none; padding: 10px 15px; background-color: #dc3545; color: white; border-radius: 4px; }
+        .header a:hover { background-color: #c82333; }
+        .case-list { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        .case-item { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 4px; }
+        .case-item h3 { margin-top: 0; color: #007bff; }
+        .status-paid { background-color: #17a2b8; color: white; padding: 5px; border-radius: 3px; }
+        .status-approved { background-color: #28a745; color: white; padding: 5px; border-radius: 3px; }
+        .status-signed { background-color: #007bff; color: white; padding: 5px; border-radius: 3px; }
+        .form-group { margin-bottom: 15px; }
+        textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 15px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Bem-vindo, Dr. {{ user.full_name }} (Médico)</h1>
+        <a href="/logout">Sair</a>
+    </div>
+
+    <div class="case-list">
+        <h2>Casos Pendentes de Aprovação (Pagos)</h2>
+        {% if pending_cases %}
+            {% for case in pending_cases %}
+                <div class="case-item">
+                    <h3>Solicitação #{{ case.id }} - {{ case.request_type }}</h3>
+                    <p>Paciente: {{ case.patient.full_name }} ({{ case.patient.email }})</p>
+                    <p>Status: <span class="status-paid">PAGO</span></p>
+                    <p>Descrição do Paciente: {{ case.description }}</p>
+                    
+                    <form onsubmit="approveCase(event, {{ case.id }})">
+                        <div class="form-group">
+                            <label for="content-{{ case.id }}">Conteúdo do Documento (Receita/Relatório):</label>
+                            <textarea id="content-{{ case.id }}" name="content" rows="8" required></textarea>
+                        </div>
+                        <button type="submit">Aprovar e Assinar Digitalmente</button>
+                    </form>
+                    <div id="message-{{ case.id }}" class="message" style="display: none;"></div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhum caso pendente de aprovação no momento.</p>
+        {% endif %}
+    </div>
+
+    <script>
+        async function approveCase(event, caseId) {
+            event.preventDefault();
+            const content = document.getElementById(`content-${caseId}`).value;
+            const messageDiv = document.getElementById(`message-${caseId}`);
+            
+            messageDiv.style.display = 'none';
+            messageDiv.classList.remove('error', 'success');
+
+            try {
+                const response = await fetch(`/api/case/${caseId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content: content })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    messageDiv.classList.add('success');
+                    messageDiv.innerHTML = `Caso #${caseId} aprovado e assinado com sucesso!`;
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    messageDiv.classList.add('error');
+                    messageDiv.innerHTML = `Erro: ${result.detail || result.error || 'Falha ao aprovar caso'}`;
+                }
+            } catch (error) {
+                messageDiv.classList.add('error');
+                messageDiv.innerHTML = `Erro de conexão: ${error.message}`;
+            } finally {
+                messageDiv.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

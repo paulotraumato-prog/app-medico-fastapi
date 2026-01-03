@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard do Paciente</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header h1 { color: #333; }
+        .header a { text-decoration: none; padding: 10px 15px; background-color: #dc3545; color: white; border-radius: 4px; }
+        .header a:hover { background-color: #c82333; }
+        .case-list { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+        .case-item { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 4px; }
+        .case-item h3 { margin-top: 0; color: #007bff; }
+        .status-pending { background-color: #ffc107; color: #333; padding: 5px; border-radius: 3px; }
+        .status-paid { background-color: #17a2b8; color: white; padding: 5px; border-radius: 3px; }
+        .status-approved { background-color: #28a745; color: white; padding: 5px; border-radius: 3px; }
+        .status-signed { background-color: #007bff; color: white; padding: 5px; border-radius: 3px; }
+        .status-rejected { background-color: #dc3545; color: white; padding: 5px; border-radius: 3px; }
+        .create-case-form { margin-top: 20px; padding: 20px; background: #e9ecef; border-radius: 8px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button[type="submit"] { padding: 12px 20px; background-color: #00a650; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button[type="submit"]:hover { background-color: #008c44; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        
+        /* Modal de Pagamento PIX */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%; text-align: center; z-index: 1001; }
+        .modal-close { position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; color: #666; }
+        .modal-close:hover { color: #333; }
+        .pix-value { font-size: 32px; font-weight: bold; color: #00a650; margin: 15px 0; }
+        .qr-code-img { max-width: 220px; margin: 15px auto; display: block; border: 1px solid #ddd; border-radius: 8px; }
+        .pix-code-input { width: 100%; padding: 10px; font-family: monospace; font-size: 11px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9; margin-top: 10px; }
+        .copy-button { margin-top: 10px; padding: 10px 20px; background-color: #00a650; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .copy-button:hover { background-color: #008c44; }
+        .copy-success { color: #00a650; font-weight: bold; margin-top: 10px; display: none; }
+        .view-status-link { display: inline-block; margin-top: 15px; color: #007bff; text-decoration: none; }
+        .view-status-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Bem-vindo, {{ user.full_name }} (Paciente)</h1>
+        <a href="/logout">Sair</a>
+    </div>
+
+    <div class="create-case-form">
+        <h2>Criar Nova Solicitação</h2>
+        <form id="create-case-form" onsubmit="createCase(event)">
+            <div class="form-group">
+                <label for="request_type">Tipo de Documento:</label>
+                <select id="request_type" name="request_type" required>
+                    <option value="">Selecione...</option>
+                    <option value="Receita Médica">Receita Médica - R$ 50,00</option>
+                    <option value="Relatório Médico">Relatório Médico - R$ 50,00</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="description">Descrição Detalhada:</label>
+                <textarea id="description" name="description" rows="5" required placeholder="Descreva o que você precisa, medicamentos anteriores, sintomas, etc."></textarea>
+            </div>
+            <button type="submit" id="submit-btn">💳 Criar Solicitação e Pagar com PIX</button>
+        </form>
+        <div id="case-message" class="message" style="display: none;"></div>
+    </div>
+
+    <div class="case-list">
+        <h2>Minhas Solicitações</h2>
+        {% if cases %}
+            {% for case in cases %}
+                <div class="case-item">
+                    <h3>Solicitação #{{ case.id }} - {{ case.request_type }}</h3>
+                    <p>Status: <span class="status-{{ case.status.name.lower() }}">{{ case.status.name }}</span></p>
+                    <p>Pagamento: <span class="status-{{ case.payment_status }}">{{ case.payment_status }}</span></p>
+                    <p>Criado em: {{ case.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    <p>Descrição: {{ case.description }}</p>
+                    
+                    {% if case.status.name == 'PENDING' %}
+                        <p>⏳ Aguardando pagamento. Valor: R$ {{ "%.2f"|format(case.payment_amount) }}</p>
+                        <a href="/patient/case/{{ case.id }}/status" style="background-color: #00a650; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">💳 Ver QR Code e Pagar</a>
+                    {% elif case.status.name == 'PAID' %}
+                        <p>✅ Pagamento confirmado! Aguardando análise do médico.</p>
+                    {% elif case.status.name == 'SIGNED' %}
+                        <p>📄 Documento assinado pelo Dr. {{ case.doctor.full_name }}.</p>
+                        <a href="/api/case/{{ case.id }}/document" style="background-color: #28a745; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none;">📥 Baixar Documento</a>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhuma solicitação encontrada. Crie sua primeira solicitação acima!</p>
+        {% endif %}
+    </div>
+
+    <!-- Modal de Pagamento PIX -->
+    <div class="modal-overlay" id="pix-modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closePixModal()">&times;</span>
+            <h3>💳 Pagamento PIX</h3>
+            <p class="pix-value" id="modal-value">R$ 50,00</p>
+            <img src="" alt="QR Code PIX" class="qr-code-img" id="modal-qr-code">
+            <p style="font-size: 14px; color: #666;">Código PIX (Copia e Cola):</p>
+            <input type="text" class="pix-code-input" id="modal-pix-code" readonly>
+            <button class="copy-button" onclick="copyPixCode()">📋 Copiar Código PIX</button>
+            <p class="copy-success" id="modal-copy-success">✅ Código copiado!</p>
+            <a href="#" class="view-status-link" id="modal-status-link">Ver status da solicitação →</a>
+        </div>
+    </div>
+
+    <script>
+        let currentCaseId = null;
+        
+        async function createCase(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            const messageDiv = document.getElementById('case-message');
+            const submitBtn = document.getElementById('submit-btn');
+            
+            messageDiv.style.display = 'none';
+            messageDiv.classList.remove('error', 'success');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Processando...';
+
+            try {
+                const response = await fetch('/api/case/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    if (result.qr_code && result.qr_code_base64) {
+                        // Mostra o modal com o QR Code PIX
+                        currentCaseId = result.case_id;
+                        document.getElementById('modal-value').textContent = `R$ ${result.payment_amount.toFixed(2).replace('.', ',')}`;
+                        document.getElementById('modal-qr-code').src = `data:image/png;base64,${result.qr_code_base64}`;
+                        document.getElementById('modal-pix-code').value = result.qr_code;
+                        document.getElementById('modal-status-link').href = `/patient/case/${result.case_id}/status`;
+                        document.getElementById('pix-modal').style.display = 'block';
+                        
+                        form.reset();
+                    } else if (result.payment_link) {
+                        // Redireciona para o link de pagamento do Mercado Pago
+                        window.location.href = result.payment_link;
+                    } else {
+                        messageDiv.classList.add('success');
+                        messageDiv.innerHTML = `✅ Solicitação criada com sucesso!`;
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
+                } else {
+                    messageDiv.classList.add('error');
+                    messageDiv.innerHTML = `❌ Erro: ${result.detail || result.error || 'Falha ao criar solicitação'}`;
+                }
+            } catch (error) {
+                messageDiv.classList.add('error');
+                messageDiv.innerHTML = `❌ Erro de conexão: ${error.message}`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💳 Criar Solicitação e Pagar com PIX';
+                messageDiv.style.display = 'block';
+            }
+        }
+        
+        function closePixModal() {
+            document.getElementById('pix-modal').style.display = 'none';
+            window.location.reload();
+        }
+        
+        function copyPixCode() {
+            const pixCode = document.getElementById('modal-pix-code');
+            pixCode.select();
+            pixCode.setSelectionRange(0, 99999);
+            
+            navigator.clipboard.writeText(pixCode.value).then(() => {
+                const successMsg = document.getElementById('modal-copy-success');
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            }).catch(err => {
+                document.execCommand('copy');
+                const successMsg = document.getElementById('modal-copy-success');
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            });
+        }
+        
+        // Fecha o modal ao clicar fora dele
+        document.getElementById('pix-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePixModal();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status do Caso #{{ case.id }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); max-width: 600px; margin: 0 auto; }
+        h2 { color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-bottom: 20px; }
+        p { margin-bottom: 10px; }
+        .status-badge { padding: 8px 12px; border-radius: 4px; color: white; font-weight: bold; display: inline-block; }
+        .status-PENDING { background-color: #ffc107; color: #333; }
+        .status-PAID { background-color: #17a2b8; }
+        .status-APPROVED { background-color: #28a745; }
+        .status-SIGNED { background-color: #007bff; }
+        .status-REJECTED { background-color: #dc3545; }
+        .payment-info { margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        .back-button { display: block; margin-top: 20px; text-align: center; text-decoration: none; padding: 10px 15px; background-color: #6c757d; color: white; border-radius: 4px; }
+        .back-button:hover { background-color: #5a6268; }
+        
+        /* Estilos para o QR Code PIX */
+        .pix-container { text-align: center; margin-top: 20px; padding: 20px; border: 2px solid #00a650; border-radius: 8px; background-color: #f0fff4; }
+        .pix-container h3 { color: #00a650; margin-bottom: 15px; }
+        .qr-code-img { max-width: 250px; margin: 15px auto; display: block; border: 1px solid #ddd; border-radius: 8px; }
+        .pix-code-container { margin-top: 15px; }
+        .pix-code-label { font-size: 14px; color: #666; margin-bottom: 5px; }
+        .pix-code-input { width: 100%; padding: 10px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9; }
+        .copy-button { margin-top: 10px; padding: 10px 20px; background-color: #00a650; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .copy-button:hover { background-color: #008c44; }
+        .copy-success { color: #00a650; font-weight: bold; margin-top: 10px; display: none; }
+        .payment-value { font-size: 28px; font-weight: bold; color: #00a650; margin: 10px 0; }
+        .refresh-button { margin-top: 15px; padding: 8px 15px; background-color: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .refresh-button:hover { background-color: #138496; }
+        .loading { display: none; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Status do Caso #{{ case.id }}</h2>
+        
+        <p><strong>Tipo de Solicitação:</strong> {{ case.request_type }}</p>
+        <p><strong>Descrição:</strong> {{ case.description }}</p>
+        <p><strong>Status Atual:</strong> <span class="status-badge status-{{ case.status.name }}">{{ case.status.name }}</span></p>
+        <p><strong>Status do Pagamento:</strong> <span class="status-badge status-{{ case.payment_status.upper() }}">{{ case.payment_status.upper() }}</span></p>
+        
+        {% if case.status.name == 'PENDING' %}
+            <div class="pix-container" id="pix-container">
+                <h3>💳 Pagamento PIX</h3>
+                <p class="payment-value">R$ {{ "%.2f"|format(case.payment_amount) }}</p>
+                
+                {% if case.qr_code_base64 %}
+                    <!-- QR Code já disponível -->
+                    <img src="data:image/png;base64,{{ case.qr_code_base64 }}" alt="QR Code PIX" class="qr-code-img" id="qr-code-img">
+                    
+                    <div class="pix-code-container">
+                        <p class="pix-code-label">Código PIX (Copia e Cola):</p>
+                        <input type="text" class="pix-code-input" id="pix-code" value="{{ case.qr_code }}" readonly>
+                        <button class="copy-button" onclick="copyPixCode()">📋 Copiar Código PIX</button>
+                        <p class="copy-success" id="copy-success">✅ Código copiado!</p>
+                    </div>
+                {% else %}
+                    <!-- Carregando QR Code -->
+                    <p class="loading" id="loading">Carregando QR Code...</p>
+                    <div id="qr-code-placeholder">
+                        <p>Clique no botão abaixo para gerar o QR Code PIX:</p>
+                        <button class="copy-button" onclick="loadPixCode()">Gerar QR Code PIX</button>
+                    </div>
+                {% endif %}
+                
+                <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                    Escaneie o QR Code com o app do seu banco ou copie o código acima.
+                </p>
+                
+                <button class="refresh-button" onclick="checkPaymentStatus()">🔄 Verificar Pagamento</button>
+                <p class="loading" id="checking-payment">Verificando pagamento...</p>
+            </div>
+        {% elif case.status.name == 'PAID' %}
+            <div class="payment-info status-PAID">
+                <h3>✅ Pagamento Confirmado!</h3>
+                <p>Sua solicitação está agora na fila de análise do médico. O prazo médio é de 24 horas.</p>
+            </div>
+        {% elif case.status.name == 'APPROVED' or case.status.name == 'SIGNED' %}
+            <div class="payment-info status-SIGNED">
+                <h3>📄 Documento Finalizado!</h3>
+                <p>Seu documento foi aprovado e assinado digitalmente.</p>
+                <a href="/api/case/{{ case.id }}/document" style="background-color: #28a745; color: white; padding: 10px 15px; border-radius: 4px; text-decoration: none; display: inline-block; margin-top: 10px;">📥 Baixar Documento Assinado</a>
+            </div>
+        {% endif %}
+
+        <a href="/patient/dashboard" class="back-button">← Voltar ao Painel</a>
+    </div>
+
+    <script>
+        function copyPixCode() {
+            const pixCode = document.getElementById('pix-code');
+            pixCode.select();
+            pixCode.setSelectionRange(0, 99999);
+            
+            navigator.clipboard.writeText(pixCode.value).then(() => {
+                const successMsg = document.getElementById('copy-success');
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            }).catch(err => {
+                // Fallback para navegadores mais antigos
+                document.execCommand('copy');
+                const successMsg = document.getElementById('copy-success');
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            });
+        }
+        
+        async function loadPixCode() {
+            const loading = document.getElementById('loading');
+            const placeholder = document.getElementById('qr-code-placeholder');
+            
+            loading.style.display = 'block';
+            placeholder.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/case/{{ case.id }}/payment');
+                const data = await response.json();
+                
+                if (response.ok && data.qr_code_base64) {
+                    // Recarrega a página para mostrar o QR Code
+                    window.location.reload();
+                } else {
+                    loading.style.display = 'none';
+                    placeholder.style.display = 'block';
+                    placeholder.innerHTML = '<p style="color: red;">Erro ao gerar QR Code. Tente novamente.</p><button class="copy-button" onclick="loadPixCode()">Tentar Novamente</button>';
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                placeholder.style.display = 'block';
+                placeholder.innerHTML = '<p style="color: red;">Erro de conexão. Tente novamente.</p><button class="copy-button" onclick="loadPixCode()">Tentar Novamente</button>';
+            }
+        }
+        
+        async function checkPaymentStatus() {
+            const checkingMsg = document.getElementById('checking-payment');
+            checkingMsg.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/case/{{ case.id }}/check-payment');
+                const data = await response.json();
+                
+                if (data.status === 'paid' || data.payment_status === 'approved') {
+                    // Pagamento confirmado - recarrega a página
+                    window.location.reload();
+                } else {
+                    checkingMsg.style.display = 'none';
+                    alert('Pagamento ainda não confirmado. Aguarde alguns instantes e tente novamente.');
+                }
+            } catch (error) {
+                checkingMsg.style.display = 'none';
+                alert('Erro ao verificar pagamento. Tente novamente.');
+            }
+        }
+        
+        // Verifica automaticamente o status do pagamento a cada 30 segundos
+        {% if case.status.name == 'PENDING' %}
+        setInterval(checkPaymentStatus, 30000);
+        {% endif %}
+    </script>
+</body>
+</html>
